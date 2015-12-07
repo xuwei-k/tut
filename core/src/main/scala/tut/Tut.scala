@@ -195,17 +195,15 @@ object TutMain extends Zed {
       _ <- checkBoundary(text, "```", false, Set())
       s <- state
       mods = modifiers(text)
-      _ <- StateT { s: TState =>
-        IO(() -> {
-          if(mods(Reset)) {
-            s.imain.reset()
-            s.imain.settings.processArguments(s.opts, true)
-            s
-          } else {
-            s
-          }
-        })
-      }
+      _ <- IO {
+        if (mods(Reset)) {
+          s.imain.reset()
+          s.imain.settings.processArguments(s.opts, true)
+          s
+        } else {
+          s
+        }
+      }.liftIO[Tut]
       _ <- s.isCode.fold(interp(text, n), out(fixShed(text, mods ++ inv)))
       _ <- checkBoundary(text, "```tut", true, mods)
     } yield ()
