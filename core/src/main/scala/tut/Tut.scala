@@ -29,6 +29,7 @@ object TutMain extends Zed {
   case object Book      extends Modifier
   case object Plain     extends Modifier
   case object Invisible extends Modifier
+  case object Reset     extends Modifier
 
   object Modifier {
     def fromString(s: String): Option[Modifier] =
@@ -39,6 +40,7 @@ object TutMain extends Zed {
         case "book"      => Book
         case "plain"     => Plain
         case "invisible" => Invisible
+        case "reset"     => Reset
       }
 
     def unsafeFromString(s: String): Modifier =
