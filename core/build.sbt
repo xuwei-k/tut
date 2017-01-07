@@ -1,6 +1,7 @@
 name := "tut-core"
 
 libraryDependencies ++= Seq(
+  "org.mdkt.compiler" % "InMemoryJavaCompiler" % "1.2",
   "org.scala-lang" %  "scala-compiler" % scalaVersion.value
 )
 

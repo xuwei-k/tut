@@ -114,4 +114,16 @@ val thing = "a" * 1000
 thing
 ```
 
+```tut:java
+1 + 2
+```
+
+```tut:java
+class A{
+  public A(String a){}
+}
+
+new A("a")
+```
+
 The end

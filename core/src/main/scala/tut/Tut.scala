@@ -5,7 +5,6 @@ import scala.tools.nsc.Settings
 import scala.tools.nsc.interpreter.IMain
 import scala.tools.nsc.interpreter.Results
 import scala.util.matching.Regex
-
 import java.io.ByteArrayOutputStream
 import java.io.Closeable
 import java.io.File
@@ -17,6 +16,10 @@ import java.io.OutputStream
 import java.io.PrintStream
 import java.io.PrintWriter
 import java.io.Writer
+
+import org.mdkt.compiler.InMemoryJavaCompiler
+
+import scala.util.control.NonFatal
 
 object TutMain extends Zed {
 
@@ -32,6 +35,7 @@ object TutMain extends Zed {
   case object Evaluated extends Modifier
   case class Decorate(decoration: String) extends Modifier
   case object Reset     extends Modifier
+  case object Java      extends Modifier
 
   object Modifier {
 
@@ -48,6 +52,7 @@ object TutMain extends Zed {
         case "evaluated" => Evaluated
         case Pattern(decoration)  => Decorate(decoration)
         case "reset"     => Reset
+        case "java"      => Java
       }
 
     def unsafeFromString(s: String): Modifier =
@@ -255,23 +260,63 @@ object TutMain extends Zed {
     else if (s.partial.isEmpty) "scala> "
     else                        "     | "
 
+  private def evalJava(source: String, lineNum: Int): Tut[Unit] = state.flatMap{ s =>
+    val className = "JavaMain"
+    val code = s"""
+       |public class ${className} {
+       |  public static Object main() {
+       |    return ${source};
+       |  }
+       |}""".stripMargin
+
+    def catchError[A](f: => A): Tut[Option[A]] = {
+      try{
+        val a = f
+        IO(Option(a)).liftIO[Tut]
+      } catch {
+        case NonFatal(e) =>
+          if (s.mods(NoFail) || s.mods(Fail)) {
+            success.map(_ => None)
+          } else {
+            error(lineNum).map(_ => None)
+          }
+      }
+    }
+
+    for {
+      clazz <- catchError(InMemoryJavaCompiler.compile(className, code))
+      _ <- clazz match {
+        case Some(c) =>
+          catchError(c.newInstance().asInstanceOf[{def main(): AnyRef}].main().toString)
+        case None =>
+          Monad[Tut].point(None)
+      }
+    } yield {
+      if (s.mods(Fail)) error(lineNum, Some("failure was asserted but no failure occurred")) else success
+    }
+  }
+
   def interp(text: String, lineNum: Int): Tut[Unit] =
     state >>= { s =>
-      (text.trim.nonEmpty || s.partial.nonEmpty || s.mods(Silent)).whenM[Tut,Unit] {
-        for {
-          _ <- s.needsNL.whenM(out(""))
-          _ <- (s.mods(Invisible)).unlessM(out(prompt(s) + text))
-          _ <- s.spigot.setActive(!(s.mods(Silent) || (s.mods(Invisible)))).liftIO[Tut]
-          _ <- s.mods(Book).whenM(s.spigot.commentAfter(s.partial + "\n" + text).liftIO[Tut])
-          r <- IO(s.imain.interpret(s.partial + "\n" + text)).liftIO[Tut] >>= {
-            case Results.Incomplete => incomplete(text)
-            case Results.Success    => if (s.mods(Fail)) error(lineNum, Some("failure was asserted but no failure occurred")) else success
-            case Results.Error      => if (s.mods(NoFail) || s.mods(Fail)) success else error(lineNum)
-          }
-          _ <- s.mods(Book).whenM(s.spigot.stopCommenting().liftIO[Tut])
-          _ <- s.spigot.setActive(true).liftIO[Tut]
-          _ <- IO(s.pw.flush).liftIO[Tut]
-        } yield ()
+      if(s.mods(Java)) {
+        evalJava(text)
+      } else {
+        (text.trim.nonEmpty || s.partial.nonEmpty || s.mods(Silent)).whenM[Tut, Unit] {
+          for {
+            _ <- s.needsNL.whenM(out(""))
+            _ <- (s.mods(Invisible)).unlessM(out(prompt(s) + text))
+            _ <- s.spigot.setActive(!(s.mods(Silent) || (s.mods(Invisible)))).liftIO[Tut]
+            _ <- s.mods(Book).whenM(s.spigot.commentAfter(s.partial + "\n" + text).liftIO[Tut])
+            r <- IO(s.imain.interpret(s.partial + "\n" + text)).liftIO[Tut] >>= {
+              case Results.Incomplete => incomplete(text)
+              case Results.Success => if (s.mods(Fail)) error(lineNum, Some("failure was asserted but no failure occurred")) else success
+              case Results.Error => if (s.mods(NoFail) || s.mods(Fail)) success else error(lineNum)
+            }
+            _ <- s.mods(Book).whenM(s.spigot.stopCommenting().liftIO[Tut])
+            _ <- s.spigot.setActive(true).liftIO[Tut]
+            _ <- IO(s.pw.flush).liftIO[Tut]
+          } yield ()
+        }
       }
     }
 }

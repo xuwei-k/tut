@@ -102,7 +102,7 @@ object Plugin extends sbt.Plugin {
         val re    = tutNameFilter.value.pattern.toString
         tutOne(streams.value, r, in, out, cp, opts, pOpts, re)
       },
-      tutOnly <<= InputTask.createDyn(Def.setting((state: State) => Space ~> tutFilesParser(state))) {
+      tutOnly := InputTask.createDyn(Def.setting((state: State) => Space ~> tutFilesParser(state))) {
         Def.task{ in =>
           Def.task{
             val r     = (runner in Test).value
@@ -118,7 +118,7 @@ object Plugin extends sbt.Plugin {
             tutOne(streams.value, r, in, out, cp, opts, pOpts, re)
           }
         }
-      },
+      }.evaluated,
       tutQuickCache := cacheDirectory.value / "tut",
       tutQuick := {
         val r     = (runner in Test).value
