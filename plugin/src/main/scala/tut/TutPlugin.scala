@@ -66,8 +66,8 @@ object TutPlugin extends AutoPlugin {
         val re    = tutNameFilter.value.pattern.toString
         tutOne(streams.value, r, in, out, cp, opts, pOpts, re)
       },
-      tutOnly <<= InputTask.createDyn(Def.setting((state: State) => Space ~> tutFilesParser(state))) {
-        Def.task{ in =>
+      tutOnly := InputTask.createDyn(Def.setting((state: State) => Space ~> tutFilesParser(state))) {
+        Def.task{ in: File =>
           Def.task{
             val r     = (runner in Tut).value
             val inR   = tutSourceDirectory.value // input root
@@ -82,7 +82,7 @@ object TutPlugin extends AutoPlugin {
             tutOne(streams.value, r, in, out, cp, opts, pOpts, re)
           }
         }
-      },
+      }.evaluated,
       tutQuickCache := cacheDirectory.value / "tut",
       tutQuick := {
         val r     = (runner in Tut).value
